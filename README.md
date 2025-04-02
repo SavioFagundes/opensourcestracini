@@ -1,4 +1,5 @@
-﻿## ✍️ O que foi feito
+## ✍️ O que foi feito
+## ✍️ O que foi feito
 
 Este PR atualiza o `README.md` com as seguintes melhorias:
 
@@ -20,4 +21,5 @@ Uma documentação clara ajuda novos desenvolvedores a entenderem rapidamente o 
 
 Se tiverem sugestões de melhorias adicionais na documentação, fico à disposição para ajustar! 😄
 
->>>>>>> f5daff4 (Melhoria na documentação do README)
+f5daff4 (Melhoria na documentação do README)
+main
