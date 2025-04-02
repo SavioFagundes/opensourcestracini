@@ -1,0 +1,91 @@
+name: SonarCloud Analysis
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: read # For PR decoration
+  contents: read # For repo checkout
+  security-events: write # For SonarCloud results
+  
+jobs:
+  SonarCloudAnalysis:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check if SONAR_TOKEN is available
+        id: check_secrets
+        run: |
+          if [[ -z "${{ secrets.SONAR_TOKEN }}" ]]; then
+            echo "SKIP_SONAR=true" >> $GITHUB_ENV
+          else
+            echo "SKIP_SONAR=false" >> $GITHUB_ENV
+          fi
+
+      - name: Set up Java
+        if: env.SKIP_SONAR == 'false'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 21
+      
+      - uses: actions/checkout@v4
+        if: env.SKIP_SONAR == 'false'
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        if: env.SKIP_SONAR == 'false'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.x'  
+
+      - name: Cache SonarCloud packages
+        if: env.SKIP_SONAR == 'false'
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+      
+      - name: Cache SonarCloud scanner
+        if: env.SKIP_SONAR == 'false'
+        id: cache-sonar-scanner
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar-scanner
+          restore-keys: ${{ runner.os }}-sonar-scanner
+      
+      - name: Install SonarCloud scanner
+        if: env.SKIP_SONAR == 'false' && steps.cache-sonar-scanner.outputs.cache-hit != 'true'
+        run: dotnet tool update dotnet-sonarscanner --tool-path ~/.sonar/cache/
+          
+      - name: Set SonarCloud variables
+        if: env.SKIP_SONAR == 'false'
+        shell: bash
+        run: |
+          KEY="${{ github.repository_owner }}_${{ github.event.repository.name }}"
+          ORG="${{ github.repository_owner }}"
+          echo "KEY=${KEY}" >> "${GITHUB_ENV}"  # Keep the variable KEY as it
+          echo "ORG=${ORG@L}" >> "${GITHUB_ENV}" # Lowercase the ORG variable
+      
+      - name: Build and analyze
+        if: env.SKIP_SONAR == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          ~/.sonar/cache/dotnet-sonarscanner begin /k:"${{ env.KEY }}" /o:"${{ env.ORG }}" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.scanner.scanAll=false /d:sonar.cs.opencover.reportsPaths="Tests/**/coverage.net9.0.opencover.xml"
+          dotnet build -c Release --verbosity minimal
+          dotnet test -c Release --verbosity minimal --no-build --no-restore /p:CollectCoverage=true /p:CoverletOutputFormat="opencover"
+          ~/.sonar/cache/dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+
+      - name: Skip SonarCloud (Forked PR)
+        if: env.SKIP_SONAR == 'true'
+        run: echo "🔒 SonarCloud is skipped because secrets are not available for PRs from forks."
